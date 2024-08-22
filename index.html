@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Face Recognition System</title>
+    <style>
+      body {
+        font-family: 'Arial', sans-serif;
+        background-color: #1e1e2f;
+        color: #ffffff;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+      }
+      h1 {
+        font-size: 36px;
+        color: #00ff99;
+        margin-bottom: 20px;
+      }
+      #videoWrapper {
+        position: relative;
+        width: 640px;
+        height: 480px;
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 0 20px rgba(0, 255, 153, 0.6);
+      }
+      #video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 1;
+        border-radius: 15px;
+      }
+      #videoCanvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 2;
+        border-radius: 15px;
+      }
+      #message {
+        margin-top: 20px;
+        font-size: 24px;
+        color: #00ff99;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Face Recognition System</h1>
+    <div id="videoWrapper">
+      <video id="video" width="640" height="480" autoplay></video>
+      <canvas id="videoCanvas" width="640" height="480"></canvas>
+    </div>
+    <div id="message">Initializing...</div>
+    <script>
+      let personDetected = false;
+
+      // Get access to the webcam
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          const video = document.getElementById('video');
+          video.srcObject = stream;
+          video.play();
+
+          const canvas = document.getElementById('videoCanvas');
+          const ctx = canvas.getContext('2d');
+          const message = document.getElementById('message');
+
+          setInterval(() => {
+            // Clear the canvas before drawing the next frame
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert the image to a base64-encoded string
+            canvas.toBlob(blob => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const base64data = reader.result.split(',')[1];
+
+                // Send the frame data to the server
+                fetch('http://127.0.0.1:5000/recognize', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({ frame: base64data })
+                })
+                .then(response => response.json())
+                .then(data => {
+                  if (data.recognitions.length > 0) {
+                    // Person detected
+                    if (!personDetected) {
+                      message.textContent = "Hello there!";
+                      personDetected = true;
+                    }
+
+                    // Draw boxes and labels on recognized faces
+                    data.recognitions.forEach(recognition => {
+                      const { top, right, bottom, left, name } = recognition;
+
+                      ctx.strokeStyle = 'lime';
+                      ctx.lineWidth = 3;
+                      ctx.strokeRect(left, top, right - left, bottom - top);
+
+                      ctx.font = '18px Arial';
+                      ctx.fillStyle = 'lime';
+                      ctx.fillText(name, left + 6, top - 10);
+                    });
+                  } else {
+                    // No person detected
+                    if (personDetected) {
+                      message.textContent = "No person detected";
+                      personDetected = false;
+                    }
+                  }
+                });
+              };
+              reader.readAsDataURL(blob);
+            }, 'image/jpeg');
+          }, 1000); // Send frames every second
+        })
+        .catch(error => console.error('Error accessing webcam:', error));
+    </script>
+  </body>
+</html>
+
